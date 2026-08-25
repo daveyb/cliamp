@@ -77,9 +77,10 @@ Download from [GitHub Releases](https://github.com/bjarneo/cliamp/releases/lates
 > extra codec packages are required. You may still need an ALSA bridge for your
 > sound server — see [Troubleshooting](#troubleshooting).
 >
-> **Windows:** download and extract `cliamp-windows-amd64.zip` from Releases. It
-> includes the codec DLLs required by Spotify. If `HOME` is not set, cliamp stores
-> its config under `%APPDATA%\cliamp`.
+> **Windows:** download and extract `cliamp-windows-amd64.zip` or
+> `cliamp-windows-arm64.zip` from Releases. Each zip includes the codec DLLs
+> required by Spotify. If `HOME` is not set, cliamp stores its config under
+> `%APPDATA%\cliamp`.
 
 **Optional runtime dependencies** (all platforms, all install methods):
 
@@ -151,24 +152,40 @@ sudo pacman -S alsa-lib flac libvorbis libogg mpg123
 
 **Windows:** No extra SDKs required for the core player — it uses pure-Go audio decoding. `ffmpeg.exe` and `yt-dlp.exe` remain optional runtime dependencies for the same formats/providers as on other platforms.
 
-Spotify support uses `go-librespot`, which needs CGO and a MinGW toolchain:
+Spotify support uses `go-librespot`, which needs CGO and an MSYS2 toolchain.
+Use MINGW64 on amd64 and CLANGARM64 on arm64.
 
 1. Install [MSYS2](https://www.msys2.org/).
-2. Open the **MSYS2 MinGW64** terminal (not the plain MSYS2 terminal) and install the toolchain and codec libraries:
+2. Open the matching MSYS2 environment, not the plain MSYS2 terminal, and install the toolchain and codec libraries.
+
+   **amd64 (MINGW64):** use the MSYS2 MinGW64 terminal, then:
    ```sh
    pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-pkg-config \
      mingw-w64-x86_64-libogg mingw-w64-x86_64-libvorbis \
      mingw-w64-x86_64-flac mingw-w64-x86_64-mpg123
    ```
-3. From that same MinGW64 terminal (so `gcc`/`pkg-config` are on `PATH`), build with CGO enabled:
+
+   **arm64 (CLANGARM64):** start `C:\msys64\clangarm64.exe`, then:
+   ```sh
+   pacman -S --needed mingw-w64-clang-aarch64-clang \
+     mingw-w64-clang-aarch64-pkgconf \
+     mingw-w64-clang-aarch64-libogg mingw-w64-clang-aarch64-libvorbis \
+     mingw-w64-clang-aarch64-flac mingw-w64-clang-aarch64-mpg123
+   ```
+3. From that same terminal, so the compiler and `pkg-config` are on `PATH`, build with CGO enabled.
+
+   **amd64:**
    ```sh
    CGO_ENABLED=1 go build -o cliamp.exe .
    ```
-   Some MSYS2 `libogg` builds ship a `libogg-0.dll` whose export table is missing `ogg_stream_iovecin`, even though it's present in the static `libogg.a`. If the link fails with `undefined reference to 'ogg_stream_iovecin'`, force static linking of just that library:
+
+   **arm64.** Go cgo looks for `gcc` unless `CC` is set. CLANGARM64's compiler is `clang`:
    ```sh
-   CGO_LDFLAGS="-Wl,-Bstatic -logg -Wl,-Bdynamic" CGO_ENABLED=1 go build -o cliamp.exe .
+   CGO_ENABLED=1 CC=clang go build -o cliamp.exe .
    ```
-4. `cliamp.exe` dynamically links codec and MinGW runtime DLLs. Either keep `C:\msys64\mingw64\bin` on `PATH` at runtime, or copy every `/mingw64/bin/*.dll` shown by `ldd cliamp.exe` next to `cliamp.exe`.
+
+   Some MSYS2 `libogg` builds ship a `libogg-0.dll` whose export table is missing `ogg_stream_iovecin`, even though it's present in the static `libogg.a`. If the link fails with `undefined reference to 'ogg_stream_iovecin'`, add `CGO_LDFLAGS="-Wl,-Bstatic -logg -Wl,-Bdynamic"` to the same command.
+4. `cliamp.exe` dynamically links codec and MinGW runtime DLLs. Keep the matching MSYS2 bin directory on `PATH` at runtime (`C:\msys64\mingw64\bin` on amd64, `C:\msys64\clangarm64\bin` on arm64), or copy every `$MINGW_PREFIX/bin/*.dll` shown by `ldd cliamp.exe` next to `cliamp.exe`.
 
 **Clone and build:**
 
