@@ -34,6 +34,20 @@ jobs:
             goos: darwin
           - os: windows-2025
             goos: windows
+            goarch: amd64
+            msystem: MINGW64
+            cgo_cc: gcc
+            cc_package: mingw-w64-x86_64-gcc
+            pkg_config_package: mingw-w64-x86_64-pkg-config
+            codec_prefix: mingw-w64-x86_64
+          - os: windows-11-arm
+            goos: windows
+            goarch: arm64
+            msystem: CLANGARM64
+            cgo_cc: clang
+            cc_package: mingw-w64-clang-aarch64-clang
+            pkg_config_package: mingw-w64-clang-aarch64-pkgconf
+            codec_prefix: mingw-w64-clang-aarch64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -47,21 +61,25 @@ jobs:
         if: matrix.goos == 'windows'
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: ${{ matrix.msystem }}
           path-type: inherit
           update: true
+          # windows-11-arm has no preinstalled C:\msys64.
+          release: true
           install: >-
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-pkg-config
-            mingw-w64-x86_64-libogg
-            mingw-w64-x86_64-libvorbis
-            mingw-w64-x86_64-flac
-            mingw-w64-x86_64-mpg123
+            ${{ matrix.cc_package }}
+            ${{ matrix.pkg_config_package }}
+            ${{ matrix.codec_prefix }}-libogg
+            ${{ matrix.codec_prefix }}-libvorbis
+            ${{ matrix.codec_prefix }}-flac
+            ${{ matrix.codec_prefix }}-mpg123
       - name: Test and build (Windows)
         if: matrix.goos == 'windows'
         shell: msys2 {0}
         env:
           CGO_ENABLED: "1"
+          # CLANGARM64's compiler is clang. Go cgo looks for gcc unless CC is set.
+          CC: ${{ matrix.cgo_cc }}
           # Some MSYS2 libogg builds ship a libogg-0.dll whose export table is
           # missing ogg_stream_iovecin, even though it's present in the static
           # libogg.a. Force just that library to link statically.

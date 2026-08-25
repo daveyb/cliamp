@@ -11,6 +11,7 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - goos: linux
@@ -28,6 +29,19 @@ jobs:
           - goos: windows
             goarch: amd64
             runner: windows-latest
+            msystem: MINGW64
+            cgo_cc: gcc
+            cc_package: mingw-w64-x86_64-gcc
+            pkg_config_package: mingw-w64-x86_64-pkg-config
+            codec_prefix: mingw-w64-x86_64
+          - goos: windows
+            goarch: arm64
+            runner: windows-11-arm
+            msystem: CLANGARM64
+            cgo_cc: clang
+            cc_package: mingw-w64-clang-aarch64-clang
+            pkg_config_package: mingw-w64-clang-aarch64-pkgconf
+            codec_prefix: mingw-w64-clang-aarch64
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
@@ -80,17 +94,19 @@ jobs:
         if: matrix.goos == 'windows'
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: ${{ matrix.msystem }}
           path-type: inherit
           update: true
+          # windows-11-arm has no preinstalled C:\msys64.
+          release: true
           install: >-
             zip
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-pkg-config
-            mingw-w64-x86_64-libogg
-            mingw-w64-x86_64-libvorbis
-            mingw-w64-x86_64-flac
-            mingw-w64-x86_64-mpg123
+            ${{ matrix.cc_package }}
+            ${{ matrix.pkg_config_package }}
+            ${{ matrix.codec_prefix }}-libogg
+            ${{ matrix.codec_prefix }}-libvorbis
+            ${{ matrix.codec_prefix }}-flac
+            ${{ matrix.codec_prefix }}-mpg123
 
       - name: Force static linking of codec libs (Linux)
         if: matrix.goos == 'linux'
@@ -165,6 +181,8 @@ jobs:
           GOOS: windows
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "1"
+          # CLANGARM64's compiler is clang. Go cgo looks for gcc unless CC is set.
+          CC: ${{ matrix.cgo_cc }}
           CGO_LDFLAGS: "-Wl,-Bstatic -logg -Wl,-Bdynamic"
         shell: msys2 {0}
         run: |
@@ -176,7 +194,7 @@ jobs:
           cp "$BINARY" "$PACKAGE/cliamp.exe"
           ldd "$PACKAGE/cliamp.exe" | while read -r _ _ path _; do
             case "$path" in
-              /mingw64/bin/*.dll) cp "$path" "$PACKAGE/" ;;
+              "$MINGW_PREFIX"/bin/*.dll) cp "$path" "$PACKAGE/" ;;
             esac
           done
           set -- "$PACKAGE"/*.dll
@@ -312,7 +330,7 @@ jobs:
 
   update-homebrew:
     needs: release
-    if: needs.release.outputs.prerelease != 'true'
+    if: github.repository == 'bjarneo/cliamp' && needs.release.outputs.prerelease != 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Download checksums
